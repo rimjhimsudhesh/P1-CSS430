@@ -3,8 +3,11 @@
 #include <grp.h>
 #include <limits.h>
 #include <pwd.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <time.h>
+
+char *lastCommand;
 
 int main(int argc, char **argv) {
   if (argc == 2 && equal(argv[1], "--interactive")) {
@@ -37,20 +40,14 @@ int interactiveShell() {
   return 0;
 }
 
-int listFiles(char *args) {
-  printf(
-      "Entering!\n"); // Check to see if we are getting to the listFiles method
-  // Check for bugs in this code snippet below
+int listFiles(char **args, int argCount) {
   bool allInfo = false; // boolean for whether -al is present in args
-  int index = 1;
-  while (index < MAX_INPUT &&
-         args[index] !=
-             NULL) { // Should we return EXIT_FAILURE if an arg is not "-al"?
-    if (equal(args[index], "-al")) {
+  for (int i = 1; i < argCount; i++) {
+    if (equal(args[i], "-al")) {
+      printf("allInfo = true");
       allInfo = true;
     }
   }
-  // ^^^^^^^^^^^^^^^^^^^^^^
 
   // Opens directory and checks to make sure the directory is found
   DIR *directory =
@@ -131,30 +128,52 @@ int getFileInformation(const char *path, struct dirent *entry) {
 
 void processLine(char *line) {
   char *token = strtok(line, " ");
-  char args[MAX_INPUT];
+  char *args[MAX_INPUT];
   int index = 0;
   while (token != NULL) {
-    // Fix looping issue!
-    printf("Looping!\n");
+    printf("%s\n", token);
     if (equal(token, ";")) {
+      // No need to check for NULL here, handled in loop
       char *first = args[0];
       if (equal(first, "ls")) {
-        printf("Working\n"); // Make sure it properly compares the first index
-                             // "ls" to "ls"
-        listFiles(args);
+        printf("Working\n");
+        listFiles(args, 0);
       }
+      break; // Exit the loop after encountering a semicolon
+    } else {
+      args[index] = token;
+      index++;
+      token = strtok(NULL, " ");
     }
-    args[index] = token;
-    token = strtok(token, " "); // token vs line vs NULL as first param
   }
+  args[index] = NULL;
+  if (args[0] != NULL) {
+    char *first = args[0];
+    if (equal(first, "ls")) {
+      listFiles(args,
+                index); // args[index] == NULL therefore index is argsCount
+    }
+  } else {
+    printf("Null first address!\n");
+  }
+
   /* WORKING
   printf("processing line: %s\n", line);
-  if (equal(line, "ls")) {
-    listFiles();
+  if (equal(line, "!!")) {
+    history("!!", lastCommand);
   } else {
-    printf("Failed\n");
+    lastCommand = line;
+    printf("Here\n");
+  }*/
+}
+
+/* NOT WORKING */
+void history(char *command, char *lastCommand) {
+  if (lastCommand == NULL) {
+    printf("No command found");
+  } else {
+    printf("Last command: %s\n", lastCommand);
   }
-  */
 }
 
 int runTests() {
