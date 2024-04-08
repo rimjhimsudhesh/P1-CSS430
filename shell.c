@@ -6,10 +6,12 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
+#define MAX_LINE 80
 
 char *lastCommand;
 
 int main(int argc, char **argv) {
+  lastCommand = calloc(1, MAXLINE);
   if (argc == 2 && equal(argv[1], "--interactive")) {
     return interactiveShell();
   } else {
@@ -34,10 +36,28 @@ int interactiveShell() {
     if (equal(line, "")) {
       continue;
     }
+    if (equal(line, "exit")) { // cheerio
+      should_run = false;
+      continue;
+    }
+    if (equal(line, "!!")) {
+      history();
+    }
+
+    *lastCommand = *line;
+
     processLine(line);
   }
   free(line);
   return 0;
+}
+
+void history() {
+  if (lastCommand == NULL) {
+    printf("No command found %s\n");
+  } else {
+    printf("Last command: %s\n", lastCommand);
+  }
 }
 
 int listFiles(char **args, int argCount) {
@@ -157,23 +177,14 @@ void processLine(char *line) {
     printf("Null first address!\n");
   }
 
-  /* WORKING
+  /*WORKING
   printf("processing line: %s\n", line);
   if (equal(line, "!!")) {
-    history("!!", lastCommand);
+    history();
   } else {
     lastCommand = line;
     printf("Here\n");
   }*/
-}
-
-/* NOT WORKING */
-void history(char *command, char *lastCommand) {
-  if (lastCommand == NULL) {
-    printf("No command found");
-  } else {
-    printf("Last command: %s\n", lastCommand);
-  }
 }
 
 int runTests() {
