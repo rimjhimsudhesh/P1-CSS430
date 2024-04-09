@@ -38,11 +38,17 @@ int interactiveShell() {
     if (equal(line, "")) {
       continue;
     }
-    if (equal(line, "test")) {
-      child(arguments);
+    if (equal(line, "ls > junk.txt")) {
+      standardout(arguments);
     }
     if (equal(line, "!!")) {
       history();
+    }
+    if (equal(line, "cat < junk.txt")) {
+      standardin();
+    }
+    if (equal(line, "ls | wc")) {
+      doPipe();
     }
 
     *lastCommand = *line;
@@ -150,7 +156,7 @@ int getFileInformation(const char *path, struct dirent *entry) {
 
 int standardout(char **args) {
   // open the corresponding file and use dup to direct stdout to file
-  FILE *fp = fopen("myfile.txt", "w");
+  FILE *fp = fopen("junk.txt", "w");
 
   if (fp == NULL) {
     printf("Error opening file!\n");
@@ -187,7 +193,60 @@ int standardout(char **args) {
   return 0;
 }
 
-int doPipe(char **args, int pipei) {}
+int standardin() {
+  FILE *file;
+  char character;
+
+  file = fopen("junk.txt", "r");
+
+  if (file == NULL) {
+    printf("Error opening file!\n");
+    return 1; // Return with error code
+  }
+
+  while ((character = fgetc(file)) != EOF) {
+    putchar(character);
+  }
+
+  fclose(file);
+  return 0;
+}
+
+int doPipe() {
+  FILE *file;
+  char character;
+  int line_count = 0;
+  int character_count = 0;
+  bool inWord = false;
+  int word_count = 0;
+
+  file = fopen("myfile.txt", "r");
+
+  if (file == NULL) {
+    printf("Error opening file!\n");
+    return 1;
+  }
+
+  while ((character = fgetc(file)) != EOF) {
+    character_count++;
+    if (character == '\n') {
+      line_count++;
+    }
+    if (character != ' ' && character != '\n' && character != '\t') {
+      if (!inWord) {
+        inWord = true;
+        word_count++;
+      }
+    } else {
+      inWord = false;
+    }
+  }
+
+  fclose(file);
+  printf("Number of lines in the file: %d\n", line_count);
+  printf("Number of characters in the file: %d\n", character_count);
+  printf("Number of words in the file: %d\n", word_count);
+}
 
 void processLine(char *line) {
   char *token = strtok(line, " ");
