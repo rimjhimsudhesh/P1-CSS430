@@ -3,6 +3,7 @@
 #include <grp.h>
 #include <limits.h>
 #include <pwd.h>
+#include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
@@ -21,6 +22,7 @@ int main(int argc, char **argv) {
 
 // interactive shell to process commands
 int interactiveShell() {
+  const char *arguments[] = {"ls", ">", "junk.txt", NULL};
   bool should_run = true;
   char *line = calloc(1, MAXLINE);
   while (should_run) {
@@ -36,9 +38,8 @@ int interactiveShell() {
     if (equal(line, "")) {
       continue;
     }
-    if (equal(line, "exit")) { // cheerio
-      should_run = false;
-      continue;
+    if (equal(line, "test")) {
+      child(arguments);
     }
     if (equal(line, "!!")) {
       history();
@@ -49,6 +50,7 @@ int interactiveShell() {
     processLine(line);
   }
   free(line);
+  free(lastCommand);
   return 0;
 }
 
@@ -145,6 +147,47 @@ int getFileInformation(const char *path, struct dirent *entry) {
 
   return EXIT_SUCCESS;
 }
+
+int standardout(char **args) {
+  // open the corresponding file and use dup to direct stdout to file
+  FILE *fp = fopen("myfile.txt", "w");
+
+  if (fp == NULL) {
+    printf("Error opening file!\n");
+    return 1;
+  }
+
+  // Opens directory and checks to make sure the directory is found
+  DIR *directory =
+      opendir("/Users/rimjhimsudhesh/Downloads/p1-shell-starter-main");
+  if (directory == NULL) {
+    perror("Directory not found!");
+    return EXIT_FAILURE;
+  }
+
+  // Iterates through all files within directory
+  struct dirent *entry;
+  int result;
+  while ((entry = readdir(directory)) != NULL) {
+    printf("%s\n", entry->d_name);
+    // const char *text = "Hello, world!\n";
+    result = fputs(entry->d_name, fp);
+    result = fputs("\n", fp);
+  }
+
+  if (result == EOF) {
+    printf("Error writing to file!\n");
+    fclose(fp);
+    return 1;
+  }
+
+  printf("Successfully wrote text to file.\n");
+  fclose(fp);
+
+  return 0;
+}
+
+int doPipe(char **args, int pipei) {}
 
 void processLine(char *line) {
   char *token = strtok(line, " ");
