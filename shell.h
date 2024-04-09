@@ -27,5 +27,7 @@ int standardout(char **args);
 struct dirent *readdir(DIR *dir);
 int getFileInformation(const char *path, struct dirent *entry);
 int main();
+int standardin();
+int doPipe();
 
 #endif
