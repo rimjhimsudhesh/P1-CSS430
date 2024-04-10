@@ -1,318 +1,234 @@
 #include "shell.h"
 #include <dirent.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <grp.h>
 #include <limits.h>
 #include <pwd.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <time.h>
-#define MAX_LINE 80
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
-char *lastCommand;
+#define MAX_LINE 80
+#define MAX_ARGS 10
+
+char lastCommand[MAX_LINE];
+
+void executeCommand(char *line) {
+  char *tokens[MAX_ARGS];
+  char *token = strtok(line, " ");
+  int tokenCount = 0;
+  while (token != NULL) {
+    printf(" toekn is: %s\n", token);
+    tokens[tokenCount++] = token;
+    token = strtok(NULL, " ");
+  }
+
+  tokens[tokenCount] = NULL;
+
+  int background = 0;
+  if (strcmp(tokens[tokenCount - 1], "&") == 0) {
+    background = 1;
+    tokens[tokenCount - 1] = NULL;
+  }
+
+  int redirectOutput = 0;
+  char *outputFile = NULL;
+  /*printf(" tokens and index are: %s, %s, %s\n", tokens[0], tokens[1],
+         tokens[2]);*/
+
+  if (strcmp(tokens[1], ">") == 0) {
+    outputFile = tokens[2];
+  }
+
+  printf("output file is %s\n", outputFile);
+
+  /*for (int i = 0; i < tokenCount; ++i) {
+    printf("%s\n", tokens[i]);
+
+    if (strcmp(tokens[i], ">") == 0) {
+      redirectOutput = 1;
+      if (i < tokenCount - 1) {
+        outputFile = tokens[i + 1];
+        *tokens[i] = NULL;
+        *tokens[i + 1] = NULL;
+      } else {
+        printf("Error: No output file in input!\n");
+        return;
+      }
+    }
+  }*/
+
+  // printf("Length of tokens %d\n:", tokenCount);
+  // printf("Tokens 2 is %s\n", tokens[2]);
+
+  // printf("output file is: %s\n", outputFile);
+
+  /*int fd = open(outputFile, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+  if (fd == -1) {
+    perror("open");
+    exit(EXIT_FAILURE);
+  }
+
+  if (dup2(fd, STDOUT_FILENO) == -1) {
+    perror("dup2");
+    close(fd);
+    exit(EXIT_FAILURE);
+  }
+
+  close(fd);*/
+
+  int redirectInput = 0;
+  char *inputFile = NULL;
+  for (int i = 0; i < tokenCount; ++i) {
+    if (strcmp(tokens[i], "<") == 0) {
+      redirectInput = 1;
+      if (i < tokenCount - 2) {
+        inputFile = tokens[i + 1];
+        tokens[i] = NULL;
+        tokens[i + 1] = NULL;
+      } else {
+        printf("Error: No input file in input!\n");
+        return;
+      }
+    }
+  }
+
+  int pipeIndex = -1;
+  for (int i = 0; i < tokenCount; ++i) {
+    if (strcmp(tokens[i], "|") == 0) {
+      pipeIndex = i;
+      break;
+    }
+  }
+
+  if (pipeIndex != -1) {
+    char *command1[MAX_ARGS];
+    char *command2[MAX_ARGS];
+    for (int i = 0; i < pipeIndex; ++i) {
+      command1[i] = tokens[i];
+    }
+    command1[pipeIndex] = NULL;
+
+    int j = 0;
+    for (int i = pipeIndex + 1; i < tokenCount; ++i) {
+      command2[j++] = tokens[i];
+    }
+    command2[j] = NULL;
+
+    int pipefd[2];
+    if (pipe(pipefd) == -1) {
+      perror("pipe");
+      exit(EXIT_FAILURE);
+    }
+
+    pid_t pid1, pid2;
+    pid1 = fork();
+    if (pid1 == -1) {
+      perror("fork");
+      exit(EXIT_FAILURE);
+    } else if (pid1 == 0) {
+      close(pipefd[0]);
+      dup2(pipefd[1], STDOUT_FILENO);
+      close(pipefd[1]);
+      execvp(command1[0], command1);
+      perror("execvp");
+      exit(EXIT_FAILURE);
+    }
+
+    pid2 = fork();
+    if (pid2 == -1) {
+      perror("fork");
+      exit(EXIT_FAILURE);
+    } else if (pid2 == 0) {
+      close(pipefd[1]);
+      dup2(pipefd[0], STDIN_FILENO);
+      close(pipefd[0]);
+      execvp(command2[0], command2);
+      perror("execvp");
+      exit(EXIT_FAILURE);
+    }
+
+    close(pipefd[0]);
+    close(pipefd[1]);
+    waitpid(pid1, NULL, 0);
+    waitpid(pid2, NULL, 0);
+  } else {
+    pid_t pid = fork();
+    if (pid == -1) {
+      perror("fork");
+      exit(EXIT_FAILURE);
+    } else if (pid == 0) {
+      // printf("token 0 %s\n", tokens[0]);
+      char *args[] = {"", NULL};
+      FILE *file = freopen(tokens[2], "w", stdout);
+      if (file == NULL) {
+        perror("Error opening file");
+      }
+      if (execvp("ls", args) == -1) {
+        perror("execvp");
+      }
+      // execvp("ls", args);
+      //  execvp(tokens[0], tokens[1]);
+      perror("execvp");
+      exit(EXIT_FAILURE);
+    } else {
+
+      int status;
+      waitpid(pid, &status, 0);
+      if (WIFEXITED(status)) {
+        strcpy(lastCommand, line);
+      }
+    }
+  }
+}
 
 int main(int argc, char **argv) {
-  lastCommand = calloc(1, MAXLINE);
-  if (argc == 2 && equal(argv[1], "--interactive")) {
-    return interactiveShell();
+  if (argc == 2 && strcmp(argv[1], "--interactive") == 0) {
+    interactiveShell();
   } else {
-    return runTests();
+    runTests();
   }
+  return 0;
 }
 
-// interactive shell to process commands
 int interactiveShell() {
-  const char *arguments[] = {"ls", ">", "junk.txt", NULL};
-  bool should_run = true;
-  char *line = calloc(1, MAXLINE);
-  while (should_run) {
+  char *line = NULL;
+  size_t len = 0;
+  ssize_t nread;
+
+  while (1) {
     printf(PROMPT);
     fflush(stdout);
-    int n = fetchline(&line);
-    printf("read: %s (length = %d)\n", line, n);
-    // ^D results in n == -1
-    if (n == -1 || equal(line, "exit")) {
-      should_run = false;
-      continue;
-    }
-    if (equal(line, "")) {
-      continue;
-    }
-    if (equal(line, "ls > junk.txt")) {
-      standardout(arguments);
-    }
-    if (equal(line, "!!")) {
-      history();
-    }
-    if (equal(line, "cat < junk.txt")) {
-      standardin();
-    }
-    if (equal(line, "ls | wc")) {
-      doPipe();
-    }
 
-    *lastCommand = *line;
-
-    processLine(line);
+    if ((nread = getline(&line, &len, stdin)) != -1) {
+      line[strcspn(line, "\n")] = '\0'; // Remove newline character
+      if (strcmp(line, "exit") == 0) {
+        break;
+      }
+      executeCommand(line);
+    } else {
+      break;
+    }
   }
+
   free(line);
-  free(lastCommand);
   return 0;
-}
-
-void history() {
-  if (lastCommand == NULL) {
-    printf("No command found %s\n");
-  } else {
-    printf("Last command: %s\n", lastCommand);
-  }
-}
-
-int listFiles(char **args, int argCount) {
-  bool allInfo = false; // boolean for whether -al is present in args
-  for (int i = 1; i < argCount; i++) {
-    if (equal(args[i], "-al")) {
-      printf("allInfo = true");
-      allInfo = true;
-    }
-  }
-
-  // Opens directory and checks to make sure the directory is found
-  DIR *directory =
-      opendir("/Users/rimjhimsudhesh/Downloads/p1-shell-starter-main");
-  if (directory == NULL) {
-    perror("Directory not found!");
-    return EXIT_FAILURE;
-  }
-
-  // Iterates through all files within directory
-  struct dirent *entry;
-  while ((entry = readdir(directory)) != NULL) {
-    if (allInfo) {
-      getFileInformation(
-          "/Users/rimjhimsudhesh/Downloads/p1-shell-starter-main", entry);
-    }
-    printf("%s\n", entry->d_name);
-  }
-  return EXIT_SUCCESS;
-}
-
-/*
-  Returns additional file information including the owner, time modified, file
-  size, permissions?
-
-  Called by the allInfo boolean from listFiles
-*/
-int getFileInformation(const char *path, struct dirent *entry) {
-  struct stat fileStat;
-
-  // Construct full path to the file
-  char fullpath[PATH_MAX];
-  snprintf(fullpath, sizeof(fullpath), "%s/%s", path, entry->d_name);
-
-  // Getting the file information
-  if (stat(fullpath, &fileStat) < 0) {
-    perror("stat");
-    return EXIT_FAILURE;
-  }
-
-  // File Name
-  printf("Name: %s\n", entry->d_name);
-
-  // File Types and Permissions
-  printf("Types and Permissions: ");
-  printf((S_ISDIR(fileStat.st_mode)) ? "d" : "-");
-  printf((fileStat.st_mode & S_IRUSR) ? "r" : "-");
-  printf((fileStat.st_mode & S_IWUSR) ? "w" : "-");
-  printf((fileStat.st_mode & S_IXUSR) ? "x" : "-");
-  printf((fileStat.st_mode & S_IRGRP) ? "r" : "-");
-  printf((fileStat.st_mode & S_IWGRP) ? "w" : "-");
-  printf((fileStat.st_mode & S_IXGRP) ? "x" : "-");
-  printf((fileStat.st_mode & S_IROTH) ? "r" : "-");
-  printf((fileStat.st_mode & S_IWOTH) ? "w" : "-");
-  printf((fileStat.st_mode & S_IXOTH) ? "x\n" : "-\n");
-
-  // Number of hard links
-  printf("Number of hard links: %ld\n", (long)fileStat.st_nlink);
-
-  // Owner user and group
-  struct passwd *pw = getpwuid(fileStat.st_uid);
-  struct group *gr = getgrgid(fileStat.st_gid);
-  printf("Owner: %s\n", (pw != NULL) ? pw->pw_name : "");
-  printf("Group: %s\n", (gr != NULL) ? gr->gr_name : "");
-
-  // File size
-  printf("Size: %lld bytes\n", (long long)fileStat.st_size);
-
-  // Last modification time
-  char date[30];
-  strftime(date, 30, "%b %d %H:%M", localtime(&(fileStat.st_mtime)));
-  printf("Last modification time: %s\n", date);
-
-  printf("\n");
-
-  return EXIT_SUCCESS;
-}
-
-int standardout(char **args) {
-  // open the corresponding file and use dup to direct stdout to file
-  FILE *fp = fopen("junk.txt", "w");
-
-  if (fp == NULL) {
-    printf("Error opening file!\n");
-    return 1;
-  }
-
-  // Opens directory and checks to make sure the directory is found
-  DIR *directory =
-      opendir("/Users/rimjhimsudhesh/Downloads/p1-shell-starter-main");
-  if (directory == NULL) {
-    perror("Directory not found!");
-    return EXIT_FAILURE;
-  }
-
-  // Iterates through all files within directory
-  struct dirent *entry;
-  int result;
-  while ((entry = readdir(directory)) != NULL) {
-    printf("%s\n", entry->d_name);
-    // const char *text = "Hello, world!\n";
-    result = fputs(entry->d_name, fp);
-    result = fputs("\n", fp);
-  }
-
-  if (result == EOF) {
-    printf("Error writing to file!\n");
-    fclose(fp);
-    return 1;
-  }
-
-  printf("Successfully wrote text to file.\n");
-  fclose(fp);
-
-  return 0;
-}
-
-int standardin() {
-  FILE *file;
-  char character;
-
-  file = fopen("junk.txt", "r");
-
-  if (file == NULL) {
-    printf("Error opening file!\n");
-    return 1; // Return with error code
-  }
-
-  while ((character = fgetc(file)) != EOF) {
-    putchar(character);
-  }
-
-  fclose(file);
-  return 0;
-}
-
-int doPipe() {
-  FILE *file;
-  char character;
-  int line_count = 0;
-  int character_count = 0;
-  bool inWord = false;
-  int word_count = 0;
-
-  file = fopen("myfile.txt", "r");
-
-  if (file == NULL) {
-    printf("Error opening file!\n");
-    return 1;
-  }
-
-  while ((character = fgetc(file)) != EOF) {
-    character_count++;
-    if (character == '\n') {
-      line_count++;
-    }
-    if (character != ' ' && character != '\n' && character != '\t') {
-      if (!inWord) {
-        inWord = true;
-        word_count++;
-      }
-    } else {
-      inWord = false;
-    }
-  }
-
-  fclose(file);
-  printf("Number of lines in the file: %d\n", line_count);
-  printf("Number of characters in the file: %d\n", character_count);
-  printf("Number of words in the file: %d\n", word_count);
-}
-
-void processLine(char *line) {
-  char *token = strtok(line, " ");
-  char *args[MAX_INPUT];
-  int index = 0;
-  while (token != NULL) {
-    printf("%s\n", token);
-    if (equal(token, ";")) {
-      // No need to check for NULL here, handled in loop
-      char *first = args[0];
-      if (equal(first, "ls")) {
-        printf("Working\n");
-        listFiles(args, 0);
-      }
-      break; // Exit the loop after encountering a semicolon
-    } else {
-      args[index] = token;
-      index++;
-      token = strtok(NULL, " ");
-    }
-  }
-  args[index] = NULL;
-  if (args[0] != NULL) {
-    char *first = args[0];
-    if (equal(first, "ls")) {
-      listFiles(args,
-                index); // args[index] == NULL therefore index is argsCount
-    }
-  } else {
-    printf("Null first address!\n");
-  }
-
-  /*WORKING
-  printf("processing line: %s\n", line);
-  if (equal(line, "!!")) {
-    history();
-  } else {
-    lastCommand = line;
-    printf("Here\n");
-  }*/
 }
 
 int runTests() {
   printf("*** Running basic tests ***\n");
-  char lines[7][MAXLINE] = {
-      "ls",      "ls -al", "ls & whoami ;", "ls > junk.txt", "cat < junk.txt",
-      "ls | wc", "ascii"};
+  char lines[7][MAX_LINE] = {
+      "ls",      "ls -al", "ls & whoami", "ls > junk.txt", "cat < junk.txt",
+      "ls | wc", "whoami"};
   for (int i = 0; i < 7; i++) {
     printf("* %d. Testing %s *\n", i + 1, lines[i]);
-    processLine(lines[i]);
+    executeCommand(lines[i]);
   }
 
   return 0;
-}
-
-// return true if C-strings are equal
-bool equal(char *a, char *b) { return (strcmp(a, b) == 0); }
-
-// read a line from console
-// return length of line read or -1 if failed to read
-// removes the \n on the line read
-int fetchline(char **line) {
-  size_t len = 0;
-  size_t n = getline(line, &len, stdin);
-  if (n > 0) {
-    (*line)[n - 1] = '\0';
-  }
-  return n;
 }
